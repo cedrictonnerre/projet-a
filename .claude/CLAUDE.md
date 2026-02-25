@@ -14,11 +14,25 @@ Utilise toujours Context7 lorsque j'ai besoin de générer du code, d'étapes de
 
 ## Aperçu de l'objectif du projet
 
-À compléter au fur et à mesure que le projet est défini.
+Dashboard nutrition & sport connecté : planifier les repas hebdomadaires en fonction de l'activité physique réelle, calculer la collation optimale selon le déficit calorique, et générer la liste de courses consolidée.
 
 ## Aperçu de l'architecture globale
 
-À compléter au fur et à mesure que l'architecture est établie.
+- **Stack** : Next.js 16 (App Router + Server Actions) + Supabase (PostgreSQL) + shadcn/ui + Tailwind CSS
+- **Commandes** :
+  - `npm run dev` — démarrer le serveur de développement (port 3000)
+  - `npm run build` — build de production
+  - `npx tsc --noEmit` — vérification TypeScript
+- **Structure** :
+  - `src/app/` — pages Next.js (Server Components)
+  - `src/components/` — composants React (Client Components)
+  - `src/actions/` — Server Actions Next.js (mutations DB)
+  - `src/lib/` — logique métier (physiologie, supabase, validations)
+  - `src/types/database.ts` — types Supabase (à régénérer après migration)
+  - `supabase/migrations/` — migrations SQL versionnées
+- **Pattern clé** : schémas Zod dans `src/lib/validations/` (partagés client/serveur)
+- **Sécurité** : SUPABASE_SERVICE_ROLE_KEY uniquement dans les Server Actions
+- **V1** : profil unique (id fixe `00000000-0000-0000-0000-000000000001`), pas d'auth
 
 ## Style visuel
 
