@@ -1,0 +1,182 @@
+schema: spec-driven
+
+context: |
+  ## Projet : Dashboard Nutrition & Sport Connecté
+
+  Application web personnelle et modulaire permettant de gérer la nutrition en fonction
+  de l'activité physique réelle. L'outil automatise la planification des repas, la gestion
+  des courses et l'ajustement calorique via une variable spécifique : la collation dynamique.
+
+  ---
+
+  ## Stack technique
+
+  | Couche | Technologie | Version |
+  |--------|-------------|---------|
+  | Framework fullstack | Next.js (App Router) | 15.x |
+  | Langage | TypeScript | 5.x |
+  | Base de données | PostgreSQL via Supabase | — |
+  | UI Components | shadcn/ui (Radix UI + Tailwind) | latest |
+  | Styles | Tailwind CSS | 3.4.x |
+  | Hébergement frontend | Vercel (Hobby) | — |
+  | Hébergement DB | Supabase (Free tier) | — |
+
+  ## Bibliothèques
+
+  | Besoin | Librairie | Version |
+  |--------|-----------|---------|
+  | Charts | Recharts | ^2.12 |
+  | Tables | TanStack Table | ^8.x |
+  | Formulaires | React Hook Form | ^7.x |
+  | Validation | Zod | ^3.x |
+  | State serveur | TanStack Query | ^5.x |
+  | State client | Zustand | ^4.x |
+  | Dates | date-fns (locale `fr`) | ^3.x |
+  | Linting / Format | Biome | ^1.x |
+
+  ---
+
+  ## Structure du projet
+
+  ```
+  src/
+  ├── app/                          ← Pages (App Router)
+  │   ├── layout.tsx                ← Layout global + providers (Query, Zustand)
+  │   ├── page.tsx                  ← Dashboard principal (résumé jour)
+  │   ├── profil/page.tsx           ← Saisie profil + recalcul objectif_kcal
+  │   ├── planificateur/page.tsx    ← Vue semaine + curseur sport + collation
+  │   ├── recettes/page.tsx         ← Bibliothèque recettes + filtres
+  │   └── courses/page.tsx          ← Liste consolidée + bouton "J'ai déjà"
+  ├── components/
+  │   ├── dashboard/
+  │   │   ├── CalorieSlider.tsx     ← Curseur sport (Client Component)
+  │   │   ├── MacroChart.tsx        ← Recharts : répartition macros du jour
+  │   │   └── WeekCalendar.tsx      ← Grille semaine avec repas + sport
+  │   ├── courses/
+  │   │   └── CoursesTable.tsx      ← TanStack Table + toggle "J'ai déjà"
+  │   └── ui/                       ← Composants shadcn/ui (copiés localement)
+  ├── lib/
+  │   ├── supabase/
+  │   │   ├── client.ts             ← Client Supabase (browser)
+  │   │   └── server.ts             ← Client Supabase (Server Actions uniquement)
+  │   ├── physiologie/
+  │   │   ├── tmb.ts                ← Formule Mifflin-St Jeor + TDEE
+  │   │   ├── macros.ts             ← Répartition glucides/protéines/lipides
+  │   │   └── collation.ts          ← Calcul déficit + sélection collation optimale
+  │   └── courses/
+  │       └── consolidation.ts      ← Agrégation ingrédients + arrondi unité Drive
+  ├── actions/                      ← Next.js Server Actions (jamais exposées côté client)
+  │   ├── profil.ts                 ← CRUD profil + recalcul objectif_kcal
+  │   ├── planificateur.ts          ← Ajout/modif repas + séance sport
+  │   └── courses.ts                ← Toggle "J'ai déjà"
+  ├── types/
+  │   └── database.ts               ← Généré : supabase gen types typescript
+  └── supabase/
+      ├── migrations/
+      │   ├── 001_init_schema.sql   ← 4 tables + FK + index
+      │   └── 002_seed_recettes.sql ← Recettes initiales
+      └── functions/
+          ├── suunto-sync/          ← V2 : webhooks Suunto
+          └── drive-basket/         ← V3 : remplissage panier Drive
+  ```
+
+  ---
+
+  ## Base de données — 4 tables PostgreSQL
+
+  - **profil** : poids, taille, age, sexe, niveau_activite, objectif, objectif_kcal (calculé par l'app), allergies (TEXT[])
+  - **recettes** : nom_recette, type_repas (matin/midi/soir/collation), ingredients (JSONB [{nom, grammes, rayon_drive}]), calories_100g, temps_prepa, is_recyclable
+  - **planificateur_hebdo** : date, repas_id (FK → recettes), sport_id (FK → suivi_sportif), is_rest (recyclage J→J+1)
+  - **suivi_sportif** : type_sport (musculation/trail/running/etirements), duree, kcal_brulees, impact_macro (glucides/proteines)
+
+  Correspondance sport → impact_macro :
+  - musculation → proteines
+  - trail, running, etirements → glucides
+
+  ---
+
+  ## Logique métier clé
+
+  ### TMB (Mifflin-St Jeor) — `lib/physiologie/tmb.ts`
+  - Homme : (10 × poids) + (6.25 × taille) - (5 × age) + 5
+  - Femme : (10 × poids) + (6.25 × taille) - (5 × age) - 161
+  - TDEE = TMB × PAL (sedentaire 1.2 / leger 1.375 / modere 1.55 / tres_actif 1.725 / extreme 1.9)
+  - objectif_kcal = TDEE + surplus (perte_poids -500 / maintien 0 / prise_muscle +250)
+
+  ### Collation dynamique — `lib/physiologie/collation.ts`
+  - deficit = objectif_kcal - kcal_repas_fixes + kcal_sport
+  - Sélection : recette WHERE type_repas='collation' AND impact_macro = sport.impact_macro, la plus proche du déficit
+  - quantite_g = ROUND((deficit / calories_100g) * 100)
+
+  ### Recyclage repas (is_rest = TRUE)
+  - La recette du soir J-1 est réutilisée au midi J
+  - Les quantités des ingrédients sont multipliées par 2 lors de la consolidation
+
+  ### Consolidation courses — `lib/courses/consolidation.ts`
+  - Requête SQL : CROSS JOIN jsonb_array_elements(ingredients) + SUM avec facteur ×2 si is_rest
+  - Regroupement par rayon_drive puis nom
+  - Arrondi à l'unité de vente supérieure : Math.ceil(total / unite_vente_g)
+
+  ---
+
+  ## Conventions de code
+
+  ### Server vs Client Components
+  - `app/*/page.tsx` → Server Components (fetch initial via Server Actions)
+  - Composants interactifs (CalorieSlider, MacroChart, CoursesTable, WeekCalendar, shadcn/ui) → Client Components (`'use client'`)
+  - Toutes les mutations DB passent par des Server Actions (`'use server'`)
+
+  ### Gestion d'état
+  - Données serveur (recettes, planificateur, courses, profil) → TanStack Query
+  - Valeur curseur sport (temps réel) → Zustand
+  - Filtre temps_prepa → Zustand
+
+  ### Sécurité (V1)
+  - Pas d'authentification en V1 (usage solo personnel)
+  - Toutes les interactions Supabase via Server Actions avec SUPABASE_SERVICE_ROLE_KEY (jamais exposée)
+  - RLS activé en V2 avec authentification multi-utilisateurs
+
+  ### Variables d'environnement
+  - NEXT_PUBLIC_SUPABASE_URL — OK côté client
+  - NEXT_PUBLIC_SUPABASE_ANON_KEY — OK côté client
+  - SUPABASE_SERVICE_ROLE_KEY — Serveur uniquement, jamais préfixé NEXT_PUBLIC_
+
+  ### Workflow types DB
+  Après chaque migration SQL : `supabase gen types typescript --project-id <id> > src/types/database.ts`
+
+  ---
+
+  ## Roadmap
+
+  - **V1 (MVP actuel)** : saisie manuelle du sport, calcul menus, liste de courses consolidée, bouton "J'ai déjà", pas d'authentification
+  - **V2** : connexion API Suunto (OAuth 2.0 + webhooks), authentification Supabase, RLS, inventaire permanent
+  - **V3** : mapping catalogue Intermarché Drive, remplissage panier automatique, export liste de courses
+
+  ---
+
+  ## Contraintes non-fonctionnelles
+
+  - Usage personnel (1 utilisateur principal, potentiellement famille proche < 5 users)
+  - Web-first, responsive mobile (Tailwind breakpoints)
+  - Budget : $0 en développement + MVP, < $25/mois acceptable en production
+  - Longévité cible : 3+ ans sans refonte majeure
+  - Toutes les quantités sont gérées en grammes
+
+rules:
+  proposal:
+    - Rédiger en français
+    - Référencer les tables DB concernées (profil, recettes, planificateur_hebdo, suivi_sportif)
+    - Préciser si la fonctionnalité est V1, V2 ou V3
+    - Inclure une section "Non-objectifs" pour délimiter le périmètre
+  design:
+    - Rédiger en français
+    - Spécifier explicitement Server Component vs Client Component pour chaque nouveau composant
+    - Préciser le chemin exact dans la structure du projet (src/app/, src/components/, src/lib/, src/actions/)
+    - Indiquer les Server Actions nécessaires et leur fichier cible
+    - Mentionner les invalidations TanStack Query après chaque mutation
+  tasks:
+    - Rédiger en français
+    - Découper en tâches atomiques de maximum 2 heures
+    - Toujours commencer par les migrations SQL avant le code applicatif
+    - Inclure une tâche de génération des types Supabase après chaque migration
+    - Tester chaque Server Action indépendamment avant d'intégrer les composants UI
