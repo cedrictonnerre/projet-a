@@ -1,7 +1,7 @@
 ## 1. Base de données — Migration SQL
 
 - [x] 1.1 Créer `supabase/migrations/001_init_schema.sql` avec la table `profil` (id, poids, taille, age, sexe, niveau_activite, objectif, objectif_kcal, allergies, created_at, updated_at)
-- [ ] 1.2 Appliquer la migration via `supabase db push` (ou Dashboard Supabase)
+- [x] 1.2 Appliquer la migration via `supabase db push` (ou Dashboard Supabase)
 - [x] 1.3 Générer les types TypeScript : `supabase gen types typescript --project-id <id> > src/types/database.ts`
 
 ## 2. Logique métier — Calcul physiologique
@@ -27,5 +27,5 @@
 
 ## 5. Validation et tests
 
-- [ ] 5.1 Tester la Server Action `sauvegarderProfil` manuellement (cas nominal homme, cas nominal femme, cas erreur validation) — nécessite les credentials Supabase dans .env.local
+- [x] 5.1 Tester la Server Action `sauvegarderProfil` manuellement (cas nominal homme, cas nominal femme, cas erreur validation) — nécessite les credentials Supabase dans .env.local
 - [x] 5.2 Tester la page `/profil` avec Playwright : formulaire vide, soumission valide, affichage récapitulatif, responsive mobile
